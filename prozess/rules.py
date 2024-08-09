@@ -38,3 +38,20 @@ def payment_without_final_approval(case: Case) -> str | None:
     if approved is None or approved > paid:
         return "Zahlung ohne finale Freigabe durch Vorgesetzte"
     return None
+
+
+def missing_director_approval(case: Case) -> str | None:
+    if case.amount is None or case.amount <= s.DIRECTOR_THRESHOLD or case.first(s.PAYMENT_HANDLED) is None:
+        return None
+    if case.first(s.FINAL_DIRECTOR) is None:
+        return f"{case.amount:,.2f} EUR ausgezahlt ohne Freigabe der Direktion (Grenze {s.DIRECTOR_THRESHOLD:,} EUR)"
+    return None
+
+
+def four_eyes(case: Case) -> str | None:
+    submitters = {r for a, r in zip(case.activities, case.resources) if a == s.SUBMITTED}
+    approvers = {r for a, r in zip(case.activities, case.resources) if a in s.APPROVALS}
+    same = sorted(submitters & approvers)
+    if same:
+        return f"Vier-Augen-Prinzip verletzt: {same[0]} hat den eigenen Antrag freigegeben"
+    return None
