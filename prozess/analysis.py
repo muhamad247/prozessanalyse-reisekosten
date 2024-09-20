@@ -35,3 +35,20 @@ def summary(log: pd.DataFrame) -> dict[str, float]:
         "Varianten": len(variants(log)),
         "Median Durchlaufzeit (Tage)": round(float(durations["tage"].median()), 1),
     }
+
+
+def variants(log: pd.DataFrame) -> pd.DataFrame:
+    """Häufigkeit jeder Aktivitätsfolge, mit kumuliertem Anteil."""
+    seq = log.groupby(s.CASE, sort=False)[s.ACTIVITY].agg(" → ".join)
+    counts = seq.value_counts().rename_axis("variante").reset_index(name="faelle")
+    counts["anteil"] = counts["faelle"] / counts["faelle"].sum()
+    counts["kumuliert"] = counts["anteil"].cumsum()
+    return counts
+
+
+def case_durations(log: pd.DataFrame, by: str | None = None) -> pd.DataFrame:
+    grouped = log.groupby(s.CASE)
+    out = pd.DataFrame({"tage": (grouped[s.TIMESTAMP].max() - grouped[s.TIMESTAMP].min()).dt.total_seconds() / 86_400})
+    if by and by in log:
+        out[by] = grouped[by].first()
+    return out
