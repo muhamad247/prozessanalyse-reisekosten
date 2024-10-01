@@ -52,3 +52,37 @@ def case_durations(log: pd.DataFrame, by: str | None = None) -> pd.DataFrame:
     if by and by in log:
         out[by] = grouped[by].first()
     return out
+
+
+def waiting_times(log: pd.DataFrame, by: str | None = None) -> pd.DataFrame:
+    """Wartezeit zwischen zwei aufeinanderfolgenden Aktivitäten eines Falls.
+
+    Der Median ist robuster als der Mittelwert, weil einzelne liegengebliebene
+    Anträge den Mittelwert stark verzerren.
+    """
+    df = log.sort_values([s.CASE, s.TIMESTAMP]).copy()
+    df["von"] = df.groupby(s.CASE)[s.ACTIVITY].shift()
+    df["stunden"] = df.groupby(s.CASE)[s.TIMESTAMP].diff().dt.total_seconds() / 3600
+    df = df.dropna(subset=["von"]).rename(columns={s.ACTIVITY: "nach"})
+    keys = ["von", "nach"] + ([by] if by and by in df else [])
+    result = df.groupby(keys)["stunden"].agg(anzahl="count", median="median", p90=lambda x: x.quantile(0.9)).reset_index()
+    return result.sort_values("median", ascending=False).reset_index(drop=True)
+
+
+def bottlenecks(log: pd.DataFrame, by: str = "department", min_cases: int = 30) -> pd.DataFrame:
+    """Übergänge, die in einer Gruppe deutlich länger dauern als im Rest.
+
+    faktor = Median in der Gruppe / Median in allen anderen Gruppen.
+    """
+    if by not in log:
+        return pd.DataFrame()
+    parts = []
+    for group, part in log.groupby(by):
+        inside = waiting_times(part)
+        rest = waiting_times(log[log[by] != group])[["von", "nach", "median"]]
+        merged = inside.merge(rest, on=["von", "nach"], suffixes=("", "_rest"))
+        merged = merged[merged["anzahl"] >= min_cases].assign(**{by: group})
+        parts.append(merged)
+    result = pd.concat(parts, ignore_index=True)
+    result["faktor"] = result["median"] / result["median_rest"]
+    return result.sort_values("faktor", ascending=False).reset_index(drop=True)
