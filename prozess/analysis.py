@@ -86,3 +86,9 @@ def bottlenecks(log: pd.DataFrame, by: str = "department", min_cases: int = 30) 
     result = pd.concat(parts, ignore_index=True)
     result["faktor"] = result["median"] / result["median_rest"]
     return result.sort_values("faktor", ascending=False).reset_index(drop=True)
+
+
+def to_pm4py(log: pd.DataFrame) -> pd.DataFrame:
+    import pm4py
+
+    return pm4py.format_dataframe(log.copy(), case_id=s.CASE, activity_key=s.ACTIVITY, timestamp_key=s.TIMESTAMP)
