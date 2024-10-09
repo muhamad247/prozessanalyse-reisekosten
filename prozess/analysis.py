@@ -92,3 +92,42 @@ def to_pm4py(log: pd.DataFrame) -> pd.DataFrame:
     import pm4py
 
     return pm4py.format_dataframe(log.copy(), case_id=s.CASE, activity_key=s.ACTIVITY, timestamp_key=s.TIMESTAMP)
+
+
+def process_model(log: pd.DataFrame, noise: float = 0.2) -> dict:
+    """Prozessmodell mit dem Inductive Miner entdecken und bewerten.
+
+    fitness: wie gut das Modell die Fälle im Log abspielen kann (1 = alle)
+    precision: wie wenig zusätzliches Verhalten das Modell erlaubt (1 = nichts)
+    Der Noise-Schwellwert lässt seltene Pfade (die Verstöße) bewusst weg,
+    damit das Modell den Normalprozess zeigt.
+    """
+    import pm4py
+
+    df = to_pm4py(log)
+    net, im, fm = pm4py.discover_petri_net_inductive(df, noise_threshold=noise)
+    fitness = pm4py.fitness_token_based_replay(df, net, im, fm)
+    precision = pm4py.precision_token_based_replay(df, net, im, fm)
+    dfg, starts, ends = pm4py.discover_dfg(df)
+    edges = (
+        pd.DataFrame([(a, b, n) for (a, b), n in dfg.items()], columns=["von", "nach", "anzahl"])
+        .sort_values("anzahl", ascending=False)
+        .reset_index(drop=True)
+    )
+    return {
+        "net": (net, im, fm),
+        "fitness": float(fitness["log_fitness"]),
+        "precision": float(precision),
+        "dfg": edges,
+        "start": dict(starts),
+        "ende": dict(ends),
+    }
+
+
+def save_model_picture(log: pd.DataFrame, path: str | Path, noise: float = 0.2) -> Path:
+    """Prozessmodell als BPMN-Bild speichern. Braucht Graphviz (https://graphviz.org)."""
+    import pm4py
+
+    tree = pm4py.discover_process_tree_inductive(to_pm4py(log), noise_threshold=noise)
+    pm4py.save_vis_bpmn(pm4py.convert_to_bpmn(tree), str(path))
+    return Path(path)
