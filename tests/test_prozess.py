@@ -53,3 +53,33 @@ def test_variants_cover_all_cases(log):
     assert var["faelle"].sum() == log[s.CASE].nunique()
     assert var["kumuliert"].iloc[-1] == pytest.approx(1.0)
     assert var["faelle"].is_monotonic_decreasing
+
+
+def test_waiting_times_are_positive(log):
+    assert (analysis.waiting_times(log)["median"] > 0).all()
+
+
+def test_discovered_model_fits_normal_process(log):
+    model = analysis.process_model(log)
+    assert model["fitness"] > 0.95
+    assert model["precision"] > 0.7
+    assert model["start"] == {s.SUBMITTED: log[s.CASE].nunique()}
+
+
+def test_xes_roundtrip_gives_same_findings(tmp_path, log):
+    """Prüft den XES-Pfad, über den auch die BPI-Challenge-Daten eingelesen werden."""
+    import pm4py
+
+    small = log[log[s.CASE].isin(log[s.CASE].unique()[:400])].copy()
+    xes = small.rename(columns={s.CASE: "case:concept:name", s.ACTIVITY: "concept:name",
+                                s.TIMESTAMP: "time:timestamp", s.RESOURCE: "org:resource",
+                                "amount": "case:Amount", "department": "case:department"})
+    xes["time:timestamp"] = pd.to_datetime(xes["time:timestamp"], utc=True)
+    path = tmp_path / "log.xes"
+    pm4py.write_xes(xes.drop(columns=["injected"]), str(path))
+
+    loaded = analysis.load_log(path)
+    assert len(loaded) == len(small)
+    expected = rules.check(small).sort_values([s.CASE, "regel"]).reset_index(drop=True)
+    actual = rules.check(loaded).sort_values([s.CASE, "regel"]).reset_index(drop=True)
+    pd.testing.assert_frame_equal(expected, actual)
