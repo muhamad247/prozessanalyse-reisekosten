@@ -83,3 +83,19 @@ def test_xes_roundtrip_gives_same_findings(tmp_path, log):
     expected = rules.check(small).sort_values([s.CASE, "regel"]).reset_index(drop=True)
     actual = rules.check(loaded).sort_values([s.CASE, "regel"]).reset_index(drop=True)
     pd.testing.assert_frame_equal(expected, actual)
+
+
+def test_csv_roundtrip(tmp_path, log):
+    path = tmp_path / "log.csv"
+    log.to_csv(path, index=False)
+    loaded = analysis.load_log(path)
+    assert analysis.summary(loaded) == analysis.summary(log)
+
+
+def test_streamlit_app_runs():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=120)
+    app.run()
+    assert not app.exception
+    assert any("alle gefunden" in c.value for c in app.caption)
